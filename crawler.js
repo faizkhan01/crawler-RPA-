@@ -1,35 +1,43 @@
-const { timeout } = require("puppeteer");
 const puppeteer = require("puppeteer");
 
 async function initBrowser() {
   const browser = await puppeteer.launch({
     headless: false,
-    defaultViewport: false,
+    defaultViewport: null,
+    args: [
+      "--disable-dev-shm-usage",
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+    ],
   });
 
   const page = await browser.newPage();
-  await page.goto("https://cloud.eais.go.kr/", {
+
+  await page.goto("https://cloud.eais.go.kr", {
     waitUntil: "networkidle2",
-    timeout: 60000,
   });
 
   await page.waitForNavigation();
-
-  // Click the close button on the popup
-  await page.click(".btnClose");
 
   return { browser, page };
 }
 
 async function login(page, username, password) {
   try {
-    await page.click(".btnLogin");
-
-    // Interacting with the element
+    await page.locator(".btnLogin").click();
     await page.waitForSelector("#membId");
-    await page.type("#membId", username);
-    await page.type("#pwd", password);
-    await page.click("button.btnLogin");
+    await page.type("#membId", username, { delay: 100 });
+    await page.type("#pwd", password, { delay: 100 });
+    await page.evaluate(async () => {
+      await document.querySelectorAll(".btnLogin")[1].click();
+    });
+
+    // Explicitly redirect to the desired URL after login
+    // await page.waitForTimeout(5000); // Adjust based on actual login time
+    // await page.goto("https://cloud.eais.go.kr", {
+    //   waitUntil: "domcontentloaded",
+    //   timeout: 60000,
+    // });
   } catch (error) {
     console.error("Login failed:", error);
   }
@@ -37,29 +45,45 @@ async function login(page, username, password) {
 
 async function searchBuilding(page, address) {
   try {
-    await page.click('text="Issuance of building ledger"'); // Adjust the selector as necessary
-    await page.waitForSelector("#address_input_id", { timeout: 60000 }); // Replace with actual ID
+    await page.on("dialog", async (dialog) => {
+      console.log(dialog.message());
+      await dialog.accept();
+    });
 
-    await page.type("#address_input_id", address); // Replace with actual ID
-    await page.keyboard.press("Enter");
-    await page.waitForTimeout(2000); // Adjust the wait time based on actual load time
+    await Promise.all([
+      page.evaluate(() => {
+        const element = [...document.querySelectorAll("a")].find((e) =>
+          e.textContent.includes("건축물대장 발급")
+        );
+        if (element) {
+          element.click();
+        }
+      }),
+      page.waitForNavigation({ waitUntil: "networkidle0" }),
+    ]);
+
+    // Wait for the '도로명주소 조회' button to appear
+    await page.waitForSelector('button[title="도로명주소 조회"].btnAddrSrch', {
+      timeout: 60000,
+    });
+
+    // Click the '도로명주소 조회' button
+    await page.click('button[title="도로명주소 조회"].btnAddrSrch');
+    await page.waitForSelector('input[title="통합주소검색"]#keyword', {
+      timeout: 60000,
+    });
+
+    // Type the address into the input field
+    await page.type('input[title="통합주소검색"]#keyword', address);
+    await page.click(
+      'button[title="조회하기"].btnNext.btnSolid.btnNormal.btn_dark'
+    );
+
+    await page.waitForTimeout(2000);
   } catch (error) {
     console.error("Search building failed:", error);
   }
 }
-
-// async function printAndSavePDF(page) {
-//   try {
-//     await page.click("#print_button_id"); // Replace with actual ID
-//     await page.waitForTimeout(2000); // Adjust the wait time based on actual load time
-
-//     // Handle the print dialog and save the PDF locally
-//     // Puppeteer can directly save the PDF using its PDF generation capability
-//     await page.pdf({ path: `output_${Date.now()}.pdf`, format: "A4" });
-//   } catch (error) {
-//     console.error("Print and save PDF failed:", error);
-//   }
-// }
 
 async function main() {
   const addresses = [
@@ -72,14 +96,14 @@ async function main() {
   ];
 
   const { browser, page } = await initBrowser();
-  await login(page, "ohk5004", "MufinNumber1");
+  await login(page, "hhs0609", "ch2730053**");
 
   for (const address of addresses) {
     await searchBuilding(page, address);
-    //   await printAndSavePDF(page);
+    // await printAndSavePDF(page);
   }
 
-  //   await browser.close();
+  await browser.close();
 }
 
 main().catch(console.error);
