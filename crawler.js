@@ -15,7 +15,7 @@ async function initBrowser() {
   const page = await browser.newPage();
 
   await page.goto("https://cloud.eais.go.kr", {
-    timeout: 60000,
+    timeout: 100000,
   });
 
   // await page.waitForNavigation();
@@ -70,17 +70,37 @@ async function searchBuilding(page) {
 
     await page.waitForNavigation({ timeout: 60000 });
 
-    const buttonHandle = await page.$('button.btnLotNum[title="지번 조회"]');
-    if (buttonHandle) {
-      await page.evaluate((el) => el.scrollIntoView(), buttonHandle);
-      await buttonHandle.click();
-    } else {
-      console.log("Button not found");
-    }
+    // Wait for the button to appear and click it
+    await page.waitForSelector('button.btnLotNum[title="지번 조회"]', {
+      timeout: 60000,
+    });
+    await page.evaluate(() => {
+      const button = document.querySelector(
+        'button.btnLotNum[title="지번 조회"]'
+      );
+      if (button) {
+        button.click();
+      } else {
+        console.log("Button not found");
+      }
+    });
 
-    await page.select("select.wd19", "1083");
+    // Wait for the modal to appear and for the dropdown to be available
+    await page.waitForSelector("select.wd19", {
+      timeout: 60000,
+    });
 
-    await page.select("select.wd20", "43750");
+    // Click the dropdown to activate it (optional step if needed)
+    await page.click("select.wd19");
+
+    // Select "경기도" in the dropdown
+    await page.select("select.wd19", "경기도");
+
+    // // Perform subsequent actions after selecting the option
+    // await page.waitForSelector('select[name="sigunguCd"].wd20', {
+    //   timeout: 60000,
+    // });
+    // await page.select('select[name="sigunguCd"].wd20', "43750");
   } catch (error) {
     console.error("Search building failed:", error);
   }
